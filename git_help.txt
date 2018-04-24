@@ -1,0 +1,63 @@
+git init
+git status
+git add .                   add all files to stage 
+git commit -m "message"     add from stage to repository
+
+git commit -a -m "message"  add and commit together
+
+git rm --cached js/main.js  remove file from stage
+git rm --cached -r .        remove all frome stage
+
+git dif                     show change in files
+
+git log                     show commits
+git log --oneline
+git log --graph
+
+git checkout -- .        undo changes after last stage(add .)
+git reset HEAD .         unstage changes (undo to last commit)
+git reset (commit id [get from git log])
+git reset --hard (commit id [get from git log])     undo until id and hard delete newer commits
+
+    for every version we make a branch
+git branch dev           create branch with name "dev"
+git checkout -b dev           create branch with name "dev"
+git branch -a            show all branches
+git checkout dev         switch to branch 'dev'
+git branch -d dev        delete branch 'dev' (outside 'dev' branch)
+
+git merge dev            merge branch dev to master (from master branch)
+if merge conflict -> handle conflict -> git commit -m "merge"
+
+git stash                 save uncommited works in stash [and move changes to last commit]
+git stash save "message"  save uncommited works with message
+git stash list           list stashes
+git stash drop [stash name]   delete stash
+git stash show [stash name]   show changes 
+git stash show -p [stash name]   show changes with show code 
+git stash apply  [stash name]   use stach in another branch 
+
+           ignore files from repository
+touch .gitignore        create file gitignore [add file names in this file to ignore]
+git commit -m "add .gitignore file to project"
+
+   inside .gitignore file:
+node_modules/      exclude all files in folder node_modules
+*.txt              exclude all txt files
+!a.txt             not exclude  a.txt
+
+git rm --cached -r .    remove all from cache file
+
+
+           github
+     register in github
+git remote add origin[is name] https://github.com/......
+git push -u origin master        save master branch files in github
+
+git pull origin        get files from github
+
+git clone https://github.com/....  [myproject]               create myproject folder and add git files
+
+git remote remove origin     remove remote
+
+git pull -f origin master

@@ -1,0 +1,3 @@
+f:
+cd Ezafi\books\__ArshadBooks\0000finalProject\_project
+pyinstaller --windowed tetris.py
