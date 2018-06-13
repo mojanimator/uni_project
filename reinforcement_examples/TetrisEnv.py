@@ -1,7 +1,6 @@
 import tkinter as tk
 import random
 import time
-# class for music
 
 # try:
 import pygame as pg
@@ -23,7 +22,7 @@ class Shape:
         self.coords = coords
 
 
-class Tetris:
+class Tetris(tk.Tk):
 
     # reset env
     def reset(self):
@@ -32,18 +31,24 @@ class Tetris:
         self.pieceIsActive = False
         self.paused = False
 
+        self.pieces = 0
         self.reward = 0
         self.last_holes = 0
         self.new_holes = 0
         self.last_pileHeight = 0
         self.new_pileHeight = 0
         self.altitudeDifference = 0
+        self.empty = 0
+        self.rowFull = 0
 
         self.done = False
         self.draw_board()
         self.spawn()
         # (self.new_holes, self.new_pileHeight, self.altitudeDifference,one hot)
         return self.getState()
+
+    def getStateActionSize(self):
+        return 27, 40  # 244, 40
 
     # it is for get command from RL Agent
     # action is between 0 and 39
@@ -71,14 +76,15 @@ class Tetris:
         self.status = self.getState(), self.getReward(), self.done
         self.setLabels()
         # ready next piece
-        self.spawn()
-
+        if (not self.done):
+            self.spawn()
+        # print(self.status)
         return self.status
 
         # compute state after each settle
 
     def getState(self):
-
+        self.pieces += 1
         tBoard = np.transpose(self.board)
 
         # Holes
@@ -104,13 +110,35 @@ class Tetris:
                 elif idy == 23:
                     height_idx.append(0)
 
+        self.empty = 0
+        for i in range(4, 24):
+            for j in range(10):
+                if self.board[i][j] == '':
+                    self.empty += 1
+
+        # full rows
+        self.rowFull = 0
+        for row in self.board:
+            if all(row):
+                self.rowFull += 1
+
+        self.empty -= self.new_holes  # empty is not hole
         self.last_pileHeight = self.new_pileHeight
         self.new_pileHeight = np.amax(height_idx)
 
         # Altitude Difference: tallest column - smallest column (article 6 page:5)
         self.altitudeDifference = self.new_pileHeight - np.amin(height_idx)
 
-        self.state = (self.new_holes, self.new_pileHeight, self.altitudeDifference, *self.oneHot)
+        self.inputBoard = []
+        for r in self.board:
+            for c in r:
+                if c == '':
+                    self.inputBoard.append(0)
+                else:
+                    self.inputBoard.append(1)
+        self.state = (
+            self.new_holes, self.new_pileHeight, self.altitudeDifference, self.empty, *self.oneHot)  # *self.inputBoard)
+        # print(self.state)
         return self.state
 
     def oneHotEncoder(self, shape, rotation):
@@ -129,15 +157,19 @@ class Tetris:
         self.oneHot[choices.get(shape)[rot.get(rotation)]] = 1
 
     def getReward(self):
-        self.reward = (self.new_holes - self.last_holes + self.new_pileHeight - self.last_pileHeight) * -5
+        self.reward = (self.empty) * -0.125 + (self.pieces) * 5 + (self.new_holes - self.last_holes) * -.1 + (
+                self.new_pileHeight - self.last_pileHeight) * -5 + self.rowFull * 100
         return self.reward
 
     def setLabels(self):
+        self.pieces_var.set('Pieces:{}'.format(self.pieces))
         self.holes_var.set('Holes:{}'.format(self.new_holes))
+        self.empty_var.set('Empty:{}'.format(self.empty))
         self.pileHeight_var.set('PileHeight: {}'.format(self.new_pileHeight))
         self.altitudeDifference_var.set('Altitude Difference: {}'.format(self.altitudeDifference))
 
     def __init__(self, parent, render):
+
         parent.title('RL Tetris')
         self.parent = parent
         self.render = render  # show game board
@@ -198,22 +230,28 @@ class Tetris:
         self.spawning = None
         self.guide_fill = ''
 
+        self.pieces_var = tk.StringVar()
         self.holes_var = tk.StringVar()
+        self.empty_var = tk.StringVar()
         self.pileHeight_var = tk.StringVar()
         self.altitudeDifference_var = tk.StringVar()
 
-        self.holes_label = tk.Label(root, textvariable=self.holes_var, width=20, height=1, font=('Tahoma', 12))
-        self.holes_label.grid(row=1, column=1, sticky='N')  # sticky: N S E W
+        self.pieces_label = tk.Label(parent, textvariable=self.pieces_var, width=20, height=1, font=('Tahoma', 12))
+        self.pieces_label.grid(row=1, column=1, sticky='N')  # sticky: N S E W
 
-        self.pileHeight_label = tk.Label(root, textvariable=self.pileHeight_var, width=20, height=1,
+        self.holes_label = tk.Label(parent, textvariable=self.holes_var, width=20, height=1, font=('Tahoma', 12))
+        self.holes_label.grid(row=2, column=1, sticky='N')  # sticky: N S E W
+
+        self.empty_label = tk.Label(parent, textvariable=self.empty_var, width=20, height=1, font=('Tahoma', 12))
+        self.empty_label.grid(row=3, column=1, sticky='N')  # sticky: N S E W
+
+        self.pileHeight_label = tk.Label(parent, textvariable=self.pileHeight_var, width=20, height=1,
                                          font=('Tahoma', 12))
-        self.pileHeight_label.grid(row=2, column=1, sticky='N')
+        self.pileHeight_label.grid(row=4, column=1, sticky='N')
 
-        self.altitudeDifference_label = tk.Label(root, textvariable=self.altitudeDifference_var, width=20, height=1,
+        self.altitudeDifference_label = tk.Label(parent, textvariable=self.altitudeDifference_var, width=20, height=1,
                                                  font=('Tahoma', 12))
-        self.altitudeDifference_label.grid(row=3, column=1, sticky='N')
-
-        # self.draw_board()
+        self.altitudeDifference_label.grid(row=5, column=1, sticky='N')
 
     def toggle_guides(self, event=None):
         self.guide_fill = '' if self.guide_fill else 'black'
@@ -221,16 +259,14 @@ class Tetris:
         self.canvas.itemconfig(self.guides[1], fill=self.guide_fill)
 
     def draw_board(self):
-        # if self.ticking:
-        #     self.parent.after_cancel(self.ticking)
         if self.spawning:
             self.parent.after_cancel(self.spawning)
         self.board = [['' for column in range(self.board_width)] for row in range(self.board_height)]
         self.field = [[None for column in range(self.board_width)] for row in range(self.board_height)]
         if self.canvas:
             self.canvas.destroy()
-        self.canvas = tk.Canvas(root, width=self.width, height=self.height)
-        self.canvas.grid(row=0, column=0, rowspan=10)
+        self.canvas = tk.Canvas(self.parent, width=self.width, height=self.height)
+        self.canvas.grid(row=0, column=0, rowspan=20)
         self.h_separator = self.canvas.create_line(0, self.height // 6, self.width, self.height // 6, width=2)
         self.v_separator = self.canvas.create_line(self.width, 0, self.width, self.height, width=2)
         for c in range(self.board_width):  # col lines
@@ -240,20 +276,16 @@ class Tetris:
 
         if self.preview_canvas:
             self.preview_canvas.destroy()
-        self.preview_canvas = tk.Canvas(root, width=5 * self.square_width, height=5 * self.square_width)
+        self.preview_canvas = tk.Canvas(self.parent, width=5 * self.square_width, height=5 * self.square_width)
         self.preview_canvas.grid(row=0, column=1)
 
         self.setLabels()
-        # self.preview()
 
         self.guides = [
             self.canvas.create_line(0, 0,
                                     0, self.height),
             self.canvas.create_line(self.width, 0,
                                     self.width, self.height)]
-        # self.spawning = self.parent.after(self.tickrate, self.spawn)
-        # self.ticking = self.parent.after(self.tickrate * 2, self.tick)
-        # self.spawn()
 
     def pause(self, event=None):
         if self.pieceIsActive and not self.paused:
@@ -523,13 +555,11 @@ class Tetris:
                 self.field.pop(row)
                 self.field.insert(0, [None for x in range(self.board_width)])
 
+# root = tk.Tk()
+# root.geometry('+%d+%d' % (800, 10))
+# tetris = Tetris(root, render=True)
 
-root = tk.Tk()
-root.geometry('+%d+%d' % (800, 10))
-tetris = Tetris(root, render=True)
-
-state = tetris.reset()
-print('reset', state)
-action = random.randint(0, 39)
-state = tetris.step(action)
-root.mainloop()
+# state = tetris.reset()
+# action = random.randint(0, 39)
+# state = tetris.step(action)
+# root.mainloop()
