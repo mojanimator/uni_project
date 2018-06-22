@@ -8,6 +8,8 @@ import pygame as pg
 #     audio = None
 # else:
 #     audio = True
+from numpy.core.multiarray import dtype
+
 from matrix_rotation import rotate_array as rotate
 import numpy as np
 
@@ -40,7 +42,8 @@ class Tetris(tk.Tk):
         self.altitudeDifference = 0
         self.empty = 0
         self.rowFull = 0
-
+        self.blocksNxN = np.zeros(10)
+        self.lowerBlocks = 0
         self.done = False
         self.draw_board()
         self.spawn()
@@ -48,7 +51,8 @@ class Tetris(tk.Tk):
         return self.getState()
 
     def getStateActionSize(self):
-        return 27, 40  # 244, 40
+        self.reset()
+        return len(self.state), 40  # 244, 40
 
     # it is for get command from RL Agent
     # action is between 0 and 39
@@ -74,7 +78,8 @@ class Tetris(tk.Tk):
         self.snap()
 
         self.status = self.getState(), self.getReward(), self.done
-        self.setLabels()
+        if self.render:
+            self.setLabels()
         # ready next piece
         if (not self.done):
             self.spawn()
@@ -129,15 +134,42 @@ class Tetris(tk.Tk):
         # Altitude Difference: tallest column - smallest column (article 6 page:5)
         self.altitudeDifference = self.new_pileHeight - np.amin(height_idx)
 
-        self.inputBoard = []
+        # convert x * '' to 0,1
+        self.oneHotBoard = np.array([]).astype(np.int8)
         for r in self.board:
             for c in r:
                 if c == '':
-                    self.inputBoard.append(0)
+                    self.oneHotBoard = np.append(self.oneHotBoard, 0)
                 else:
-                    self.inputBoard.append(1)
-        self.state = (
-            self.new_holes, self.new_pileHeight, self.altitudeDifference, self.empty, *self.oneHot)  # *self.inputBoard)
+                    self.oneHotBoard = np.append(self.oneHotBoard, 1)
+
+        # print(self.oneHotBoard)
+        # find rectangle shapes
+        self.calculated_pixel = np.zeros([24, 10])
+        self.blocksNxN = np.zeros(10).astype(np.int8)  # 0 : 10 squares
+        self.inputBoard = np.reshape(self.oneHotBoard, [24, 10])
+        self.lowerBlocks = 0
+        for r in range(4, 24):  # 4:23
+            for c in range(10):  # 0:9
+                for square in range(2, 11):  # 3:10 squares
+                    if r + square < 25 and c + square < 11 and self.board[r][c] != '' \
+                            and self.calculated_pixel[r][c] != 1:
+                        # print(square, self.inputBoard[r:r + square , c:c + square ])
+                        if np.all(self.inputBoard[r:r + square, c:c + square]):  # begin:end-1
+                            self.blocksNxN[square] += 1
+                            self.lowerBlocks = self.lowerBlocks + (square * r)
+                            # self.calculated_pixel[r:r + square, c:c + square] = 1
+                        else:
+                            break
+        for i in range(2, len(self.blocksNxN)):  # remove  3x3 blocks from 4x4 blocks and...
+            self.blocksNxN[i - 1] -= self.blocksNxN[i]
+        # print(self.blocksNxN)
+
+        # self.state = (
+        #     self.new_holes, self.new_pileHeight, self.altitudeDifference, self.empty,
+        #     *self.blocksNxN[3:], *self.oneHotBoard)  # , )*self.oneHot
+        # print(self.oneHotBoard)
+        self.state = (np.reshape([self.inputBoard], (1, 24, 10, 1)))  # .astype('float32')
         # print(self.state)
         return self.state
 
@@ -157,8 +189,12 @@ class Tetris(tk.Tk):
         self.oneHot[choices.get(shape)[rot.get(rotation)]] = 1
 
     def getReward(self):
-        self.reward = (self.empty) * -0.125 + (self.pieces) * 5 + (self.new_holes - self.last_holes) * -.1 + (
-                self.new_pileHeight - self.last_pileHeight) * -5 + self.rowFull * 100
+        self.reward = self.blocksNxN[2] * 1 + self.blocksNxN[3] * 2 + self.blocksNxN[4] * 2.5 \
+                      + self.blocksNxN[5] * 3 + self.blocksNxN[6] * 3.5 + self.blocksNxN[7] * 4 \
+                      + self.blocksNxN[8] * 4.5 + self.lowerBlocks
+        +(self.empty) * -0.125 + (self.pieces) * 1 + (self.new_holes - self.last_holes) * -.1 \
+        + (self.new_pileHeight - self.last_pileHeight) * -1 + self.rowFull * 100
+        # self.reward = self.lowerBlocks
         return self.reward
 
     def setLabels(self):
@@ -167,9 +203,12 @@ class Tetris(tk.Tk):
         self.empty_var.set('Empty:{}'.format(self.empty))
         self.pileHeight_var.set('PileHeight: {}'.format(self.new_pileHeight))
         self.altitudeDifference_var.set('Altitude Difference: {}'.format(self.altitudeDifference))
+        self.blocks_var.set('2x2 Blocks: {}\n3x3 Blocks: {}\n4x4 Blocks: {}\n5x5 Blocks: {}\n6x6 Blocks: {}'
+                            '\n7x7 Blocks: {}\n8x8 Blocks: {}\n9x9 Blocks: {}'
+                            .format(self.blocksNxN[2], self.blocksNxN[3], self.blocksNxN[4], self.blocksNxN[5],
+                                    self.blocksNxN[6], self.blocksNxN[7], self.blocksNxN[8], self.blocksNxN[9]))
 
     def __init__(self, parent, render):
-
         parent.title('RL Tetris')
         self.parent = parent
         self.render = render  # show game board
@@ -211,47 +250,54 @@ class Tetris(tk.Tk):
         self.colors = {'s': 'green', 'z': 'yellow', 'r': 'turquoise', 'L': 'orange', 'o': 'blue', 'I': 'red',
                        'T': 'violet'}
 
-        for key in ('<Down>', '<Left>', '<Right>', 'a', 'A', 's', 'S', 'd', 'D'):
-            self.parent.bind(key, self.shift)
+        # for key in ('<Down>', '<Left>', '<Right>', 'a', 'A', 's', 'S', 'd', 'D'):
+        #     self.parent.bind(key, self.shift)
+        #
+        # for key in ('0', 'q', 'Q', 'e', 'E', '<Up>', 'w', 'W'):
+        #     self.parent.bind(key, self.rotate)
+        #
+        # self.parent.bind('<space>', self.snap)
+        # self.parent.bind('<Escape>', self.pause)
+        # self.parent.bind('n', self.reset)
+        # self.parent.bind('N', self.reset)
+        # self.parent.bind('g', self.toggle_guides)
+        # self.parent.bind('G', self.toggle_guides)
 
-        for key in ('0', 'q', 'Q', 'e', 'E', '<Up>', 'w', 'W'):
-            self.parent.bind(key, self.rotate)
+        if self.render:
+            self.canvas = None
+            self.preview_canvas = None
+            self.ticking = None
+            self.spawning = None
+            self.guide_fill = ''
 
-        self.parent.bind('<space>', self.snap)
-        self.parent.bind('<Escape>', self.pause)
-        self.parent.bind('n', self.reset)
-        self.parent.bind('N', self.reset)
-        self.parent.bind('g', self.toggle_guides)
-        self.parent.bind('G', self.toggle_guides)
+            self.pieces_var = tk.StringVar()
+            self.holes_var = tk.StringVar()
+            self.empty_var = tk.StringVar()
+            self.pileHeight_var = tk.StringVar()
+            self.altitudeDifference_var = tk.StringVar()
+            self.blocks_var = tk.StringVar()
 
-        self.canvas = None
-        self.preview_canvas = None
-        self.ticking = None
-        self.spawning = None
-        self.guide_fill = ''
+            self.pieces_label = tk.Label(parent, textvariable=self.pieces_var, width=20, height=1, font=('Tahoma', 12))
+            self.pieces_label.grid(row=1, column=1, sticky='N')  # sticky: N S E W
 
-        self.pieces_var = tk.StringVar()
-        self.holes_var = tk.StringVar()
-        self.empty_var = tk.StringVar()
-        self.pileHeight_var = tk.StringVar()
-        self.altitudeDifference_var = tk.StringVar()
+            self.holes_label = tk.Label(parent, textvariable=self.holes_var, width=20, height=1, font=('Tahoma', 12))
+            self.holes_label.grid(row=2, column=1, sticky='N')  # sticky: N S E W
 
-        self.pieces_label = tk.Label(parent, textvariable=self.pieces_var, width=20, height=1, font=('Tahoma', 12))
-        self.pieces_label.grid(row=1, column=1, sticky='N')  # sticky: N S E W
+            self.empty_label = tk.Label(parent, textvariable=self.empty_var, width=20, height=1, font=('Tahoma', 12))
+            self.empty_label.grid(row=3, column=1, sticky='N')  # sticky: N S E W
 
-        self.holes_label = tk.Label(parent, textvariable=self.holes_var, width=20, height=1, font=('Tahoma', 12))
-        self.holes_label.grid(row=2, column=1, sticky='N')  # sticky: N S E W
+            self.pileHeight_label = tk.Label(parent, textvariable=self.pileHeight_var, width=20, height=1,
+                                             font=('Tahoma', 12))
+            self.pileHeight_label.grid(row=4, column=1, sticky='N')
 
-        self.empty_label = tk.Label(parent, textvariable=self.empty_var, width=20, height=1, font=('Tahoma', 12))
-        self.empty_label.grid(row=3, column=1, sticky='N')  # sticky: N S E W
+            self.altitudeDifference_label = tk.Label(parent, textvariable=self.altitudeDifference_var, width=20,
+                                                     height=1,
+                                                     font=('Tahoma', 12))
+            self.altitudeDifference_label.grid(row=5, column=1, sticky='N')
 
-        self.pileHeight_label = tk.Label(parent, textvariable=self.pileHeight_var, width=20, height=1,
+            self.blocks_label = tk.Label(parent, textvariable=self.blocks_var, width=20, height=10,
                                          font=('Tahoma', 12))
-        self.pileHeight_label.grid(row=4, column=1, sticky='N')
-
-        self.altitudeDifference_label = tk.Label(parent, textvariable=self.altitudeDifference_var, width=20, height=1,
-                                                 font=('Tahoma', 12))
-        self.altitudeDifference_label.grid(row=5, column=1, sticky='N')
+            self.blocks_label.grid(row=6, column=1, sticky='N')
 
     def toggle_guides(self, event=None):
         self.guide_fill = '' if self.guide_fill else 'black'
@@ -259,33 +305,35 @@ class Tetris(tk.Tk):
         self.canvas.itemconfig(self.guides[1], fill=self.guide_fill)
 
     def draw_board(self):
-        if self.spawning:
-            self.parent.after_cancel(self.spawning)
+        # if self.spawning:
+        #     self.parent.after_cancel(self.spawning)
         self.board = [['' for column in range(self.board_width)] for row in range(self.board_height)]
-        self.field = [[None for column in range(self.board_width)] for row in range(self.board_height)]
-        if self.canvas:
-            self.canvas.destroy()
-        self.canvas = tk.Canvas(self.parent, width=self.width, height=self.height)
-        self.canvas.grid(row=0, column=0, rowspan=20)
-        self.h_separator = self.canvas.create_line(0, self.height // 6, self.width, self.height // 6, width=2)
-        self.v_separator = self.canvas.create_line(self.width, 0, self.width, self.height, width=2)
-        for c in range(self.board_width):  # col lines
-            self.canvas.create_line(c * self.square_width, 0, c * self.square_width, self.height, fill='lightgray')
-        for r in range(self.board_height):  # row lines
-            self.canvas.create_line(0, r * self.square_width, self.width, r * self.square_width, fill='lightgray')
 
-        if self.preview_canvas:
-            self.preview_canvas.destroy()
-        self.preview_canvas = tk.Canvas(self.parent, width=5 * self.square_width, height=5 * self.square_width)
-        self.preview_canvas.grid(row=0, column=1)
+        if self.render:
+            self.field = [[None for column in range(self.board_width)] for row in range(self.board_height)]
+            if self.canvas:
+                self.canvas.destroy()
+            self.canvas = tk.Canvas(self.parent, width=self.width, height=self.height)
+            self.canvas.grid(row=0, column=0, rowspan=20)
+            self.h_separator = self.canvas.create_line(0, self.height // 6, self.width, self.height // 6, width=2)
+            self.v_separator = self.canvas.create_line(self.width, 0, self.width, self.height, width=2)
+            for c in range(self.board_width):  # col lines
+                self.canvas.create_line(c * self.square_width, 0, c * self.square_width, self.height, fill='lightgray')
+            for r in range(self.board_height):  # row lines
+                self.canvas.create_line(0, r * self.square_width, self.width, r * self.square_width, fill='lightgray')
 
-        self.setLabels()
+            # if self.preview_canvas:
+            #     self.preview_canvas.destroy()
+            # self.preview_canvas = tk.Canvas(self.parent, width=5 * self.square_width, height=5 * self.square_width)
+            # self.preview_canvas.grid(row=0, column=1)
 
-        self.guides = [
-            self.canvas.create_line(0, 0,
-                                    0, self.height),
-            self.canvas.create_line(self.width, 0,
-                                    self.width, self.height)]
+            self.setLabels()
+
+            self.guides = [
+                self.canvas.create_line(0, 0,
+                                        0, self.height),
+                self.canvas.create_line(self.width, 0,
+                                        self.width, self.height)]
 
     def pause(self, event=None):
         if self.pieceIsActive and not self.paused:
@@ -321,16 +369,17 @@ class Tetris(tk.Tk):
             for column, square in zip(range(c, c + w), squares):
                 if square:
                     self.board[row][column] = square
-                    square_idx = next(square_idxs)
-                    coord = (column * self.square_width, row * self.square_width,
-                             (column + 1) * self.square_width, (row + 1) * self.square_width)
-                    self.activePiece.coords[square_idx] = coord
-                    self.canvas.coords(self.activePiece.piece[square_idx], coord)
+                    if self.render:
+                        square_idx = next(square_idxs)
+                        coord = (column * self.square_width, row * self.square_width,
+                                 (column + 1) * self.square_width, (row + 1) * self.square_width)
+                        self.activePiece.coords[square_idx] = coord
+                        self.canvas.coords(self.activePiece.piece[square_idx], coord)
 
         self.activePiece.row = r
         self.activePiece.column = c
         self.activePiece.shape = shape
-        self.move_guides(c, c + w)
+        # self.move_guides(c, c + w)
         # self.print_board()
         return True
 
@@ -396,15 +445,14 @@ class Tetris(tk.Tk):
             self.settle()
 
     def settle(self):
-
         self.pieceIsActive = False
         for row in self.board:
             row[:] = ['x' if cell == '*' else cell for cell in row]
+        if self.render:
+            for (x1, y1, x2, y2), id in zip(self.activePiece.coords, self.activePiece.piece):
+                self.field[y1 // self.square_width][x1 // self.square_width] = id
 
-        for (x1, y1, x2, y2), id in zip(self.activePiece.coords, self.activePiece.piece):
-            self.field[y1 // self.square_width][x1 // self.square_width] = id
-
-        self.setLabels()
+            self.setLabels()
 
         if any(any(row) for row in self.board[:4]):
             self.lose()
@@ -416,54 +464,7 @@ class Tetris(tk.Tk):
         self.done = True
         # self.reset()
 
-    def preview(self):
-        self.preview_canvas.delete(tk.ALL)
-        key = random.choice('szrLoIT')
-        rot = random.choice((0, 90, 180, 270))
-        shape = rotate(self.shapes[key], rot)
-        width = len(shape[0])
-        start = 0
-        self.previewPiece = Shape(shape, key, [], 0, start, [])
-        half = self.square_width // 2
-        for y, row in enumerate(shape):
-            self.board[y][start:start + width] = shape[y]
-            for x, cell in enumerate(row):
-                if cell:
-                    self.previewPiece.coords.append(
-                        (
-                            self.square_width * x + half,
-                            self.square_width * y + half,
-                            self.square_width * (x + 1) + half,
-                            self.square_width * (y + 1) + half
-                        )
-                    )
-
-                    # self.previewPiece.piece.append(
-                    #     self.preview_canvas.create_rectangle(
-                    #         self.previewPiece.coords[-1], fill=self.colors[key], width=2,
-                    #         # outline='dark' + self.colors[key]
-                    #     )
-                    # )
-        ls = len(shape)
-        ws = len(shape[0])
-        self.previewPiece.rotation_index = 0
-
-        if 3 in (ws, ls):
-            self.previewPiece.rotation = [(0, 0), (1, 0), (-1, 1), (0, -1)]
-        else:
-            self.previewPiece.rotation = [(1, -1), (0, 1), (0, 0), (-1, 0)]
-
-        if (ls < ws):  # wide shape
-            self.previewPiece.rotation_index += 1
-
-    def move_guides(self, left, right):
-        left *= self.square_width
-        right *= self.square_width
-        self.canvas.coords(self.guides[0], left, 0, left, self.height)
-        self.canvas.coords(self.guides[1], right, 0, right, self.height)
-
     def spawn(self):
-
         key = random.choice('szrLoIT')
         rot = random.choice((0, 90, 180, 270))
         self.oneHotEncoder(key, rot)
@@ -486,23 +487,25 @@ class Tetris(tk.Tk):
                 tmp = y  # one row down for rotation
 
             self.board[tmp][start:start + width] = self.activePiece.shape[y]
-            for x, cell in enumerate(row, start=start):
-                if cell:
-                    self.activePiece.coords.append(
-                        (
-                            self.square_width * x,
-                            self.square_width * tmp,
-                            self.square_width * (x + 1),
-                            self.square_width * (tmp + 1)
-                        )
-                    )
 
-                    self.activePiece.piece.append(
-                        self.canvas.create_rectangle(
-                            self.activePiece.coords[-1], fill=self.colors[self.activePiece.key], width=2,
-                            # outline='dark' + self.colors[key]
+            if (self.render):
+                for x, cell in enumerate(row, start=start):
+                    if cell:
+                        self.activePiece.coords.append(
+                            (
+                                self.square_width * x,
+                                self.square_width * tmp,
+                                self.square_width * (x + 1),
+                                self.square_width * (tmp + 1)
+                            )
                         )
-                    )
+
+                        self.activePiece.piece.append(
+                            self.canvas.create_rectangle(
+                                self.activePiece.coords[-1], fill=self.colors[self.activePiece.key], width=2,
+                                # outline='dark' + self.colors[key]
+                            )
+                        )
         ls = len(self.activePiece.shape)
         ws = len(self.activePiece.shape[0])
         self.activePiece.rotation_index = 0
@@ -515,7 +518,7 @@ class Tetris(tk.Tk):
         if (ls < ws):  # wide shape
             self.activePiece.rotation_index += 1
 
-        self.move_guides(start, (start + width))
+        # self.move_guides(start, (start + width))
 
     def snap(self, dir=None, event=None):
         if not self.pieceIsActive:
@@ -554,12 +557,3 @@ class Tetris(tk.Tk):
             for row in indices:
                 self.field.pop(row)
                 self.field.insert(0, [None for x in range(self.board_width)])
-
-# root = tk.Tk()
-# root.geometry('+%d+%d' % (800, 10))
-# tetris = Tetris(root, render=True)
-
-# state = tetris.reset()
-# action = random.randint(0, 39)
-# state = tetris.step(action)
-# root.mainloop()

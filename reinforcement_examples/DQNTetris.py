@@ -28,11 +28,11 @@ from multiprocessing import Process, Pipe
 
 root = tk.Tk()
 root.geometry('+%d+%d' % (800, 10))
-env = Tetris(root, render=True)
+env = Tetris(root, True)
 
 state_size, action_size = env.getStateActionSize()
-batch_size = 30
-n_episodes = 1000
+batch_size = 32
+n_episodes = 100000
 output_dir = 'model_output/RLTetris'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
@@ -69,16 +69,16 @@ def showDiagram(x, y):
 for e in range(n_episodes):
     state = env.reset()
     # print(state)
-    state = np.reshape(state, [1, state_size])
+    # state = np.reshape(state, [1, state_size])
     losed = False
     while (not losed):
         action = agent.act(state)
         (next_state), reward, losed = env.step(action)
-        reward = reward + 5 if not losed else reward - 100
-        next_state = np.reshape(next_state, [1, state_size])
+        reward = reward + 5 if not losed else reward - 10
+        # next_state = np.reshape(next_state, [1, state_size])
         agent.remember(state, action, reward, next_state, losed)
         state = next_state
-        empty = state[0][3]
+        # empty = state[0][3]
 
         if losed:
             print("episode:{}/{}, reward:{}, e: {:.2}".format(e, n_episodes, reward, agent.EPSILON))
@@ -93,3 +93,4 @@ for e in range(n_episodes):
         #     agent.save(output_dir + "weights_" + '{:04d}'.format(e) + ".hdf5")
 
 plt.savefig('fig.png', bbox_inches='tight')
+agent.save('model.h5')

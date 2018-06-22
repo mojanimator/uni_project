@@ -29,4 +29,7 @@ choices = {'s': [0, 1, 2, 3], 'z': [4, 5, 6, 7], 'r': [8, 9, 10, 11], 'L': [12, 
            'I': [17, 18], 'T': [19, 20, 21, 22]}
 # oneHot[choices.get(shape)[rot.get(rotation)]] = 1
 
-print(oneHot)
+# print(oneHot)
+
+a = np.array([[4, 1, 8, 4, 4], [5, 4, 2, 1, 1], [5, 4, 2, 3, 3]])
+print(a[0:3, 1:3])
