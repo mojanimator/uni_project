@@ -20,6 +20,7 @@ import numpy as np
 from DQNAgent import DQNAgent
 from TetrisEnv import Tetris
 import matplotlib.pyplot as plt
+import time
 import matplotlib.animation as animation
 from matplotlib import style
 from multiprocessing import Process, Pipe
@@ -31,8 +32,7 @@ root.geometry('+%d+%d' % (800, 10))
 env = Tetris(root, True)
 
 state_size, action_size = env.getStateActionSize()
-batch_size = 32
-n_episodes = 100000
+
 output_dir = 'model_output/RLTetris'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
@@ -53,39 +53,52 @@ ax = f.add_subplot(111)
 agent = DQNAgent(state_size, action_size)
 
 
-def showDiagram(x, y):
+def showDiagram():
     # x, y = fargs
     ax.clear()
     ax.set_xlabel('Episode')
-    ax.set_ylabel('Reward')
-    ax.legend(loc=2)
+    ax.set_ylabel('Mean Reward')
+    # ax.legend(loc=2)
 
     # plt.legend(loc=2)
-    line1, = ax.plot(xs, ys, '-b', label='reward', linewidth=1)
+    line1, = ax.plot(xs, ys, '-b', label='mean reward', linewidth=.5)
     # canvas.show()
-    plt.pause(0.001)
+    plt.pause(.000001)
 
 
+batch_size = 32
+n_episodes = 100000
+counter = 0
+episode_rewards = []
 for e in range(n_episodes):
     state = env.reset()
     # print(state)
     # state = np.reshape(state, [1, state_size])
     losed = False
+
     while (not losed):
+
         action = agent.act(state)
         (next_state), reward, losed = env.step(action)
-        reward = reward + 5 if not losed else reward - 10
-        # next_state = np.reshape(next_state, [1, state_size])
+        reward = reward if not losed else reward - 5
+
         agent.remember(state, action, reward, next_state, losed)
         state = next_state
-        # empty = state[0][3]
 
+        # counter += 1
+        #
+        # xs.append(counter)
+        # ys.append(reward)
+        # showDiagram()
+        # print('reward', reward)
         if losed:
-            print("episode:{}/{}, reward:{}, e: {:.2}".format(e, n_episodes, reward, agent.EPSILON))
+            # print("episode:{}/{}, reward:{}, e: {:.2}".format(e, n_episodes, reward, agent.EPSILON))
+            used = np.sum(state)
+            # *100/240
+            print("episode:{}/{}  used:{:.4}% e: {:.2}".format(e, n_episodes, used * .5, agent.EPSILON))
             xs.append(e)
-            ys.append(reward)
-            showDiagram(e, reward)
-            break
+            ys.append(used)
+            showDiagram()
         if len(agent.memory) > batch_size:
             agent.replay(batch_size)
 

@@ -9,7 +9,7 @@ import pygame as pg
 # else:
 #     audio = True
 from numpy.core.multiarray import dtype
-
+from tensorflow.python.keras import activations
 from matrix_rotation import rotate_array as rotate
 import numpy as np
 
@@ -41,9 +41,11 @@ class Tetris(tk.Tk):
         self.new_pileHeight = 0
         self.altitudeDifference = 0
         self.empty = 0
-        self.rowFull = 0
+        self.rowsFilled = 0
         self.blocksNxN = np.zeros(10)
         self.lowerBlocks = 0
+        self.piece_height = []
+        self.height_idx = []
         self.done = False
         self.draw_board()
         self.spawn()
@@ -52,7 +54,7 @@ class Tetris(tk.Tk):
 
     def getStateActionSize(self):
         self.reset()
-        return len(self.state), 40  # 244, 40
+        return len(self.oneHotBoard), 40  # 240, 40
 
     # it is for get command from RL Agent
     # action is between 0 and 39
@@ -60,7 +62,7 @@ class Tetris(tk.Tk):
         shift_idx = action // 4  # 0<action<9
         rotation_idx = action % 4  # 0<action<3
 
-        # move shapes base on rotation 
+        # move shapes base on rotation
         if (rotation_idx == 2):  # 180 =90 * 2
             self.rotate(dir=1)
             self.rotate(dir=1)
@@ -78,8 +80,8 @@ class Tetris(tk.Tk):
         self.snap()
 
         self.status = self.getState(), self.getReward(), self.done
-        if self.render:
-            self.setLabels()
+        # if self.render:
+        #     self.setLabels()
         # ready next piece
         if (not self.done):
             self.spawn()
@@ -104,38 +106,53 @@ class Tetris(tk.Tk):
                             self.new_holes += 1
                         col += 1
                     break
-
+        self.piece_holes = self.new_holes - self.last_holes
         # Pile Height: tallest column (article 6 page:4)
-        height_idx = []
+        self.height_idx.clear()
         for idx, row in enumerate(tBoard):
             for idy, col in enumerate(row):
                 if col == 'x':
-                    height_idx.append(24 - idy)
+                    self.height_idx.append(24 - idy)
                     break
                 elif idy == 23:
-                    height_idx.append(0)
+                    self.height_idx.append(0)
 
-        self.empty = 0
-        for i in range(4, 24):
-            for j in range(10):
-                if self.board[i][j] == '':
-                    self.empty += 1
+        # self.empty = 0
+        # self.lowerBlocks = 0
+        # for i in range(4, 24):
+        #     col = 0
+        #     for j in range(10):
+        #         if self.board[i][j] == '':
+        #             self.empty += 1
+        #         else:
+        #             col += 1
+        #     self.lowerBlocks = self.lowerBlocks + (col * i)
 
-        # full rows
-        self.rowFull = 0
-        for row in self.board:
-            if all(row):
-                self.rowFull += 1
+        # self.full = 0
+        #
+        # for i in range(4, 24):
+        #     for j in range(10):
+        #         if self.board[i][j] != '':
+        #             self.full += 1
 
-        self.empty -= self.new_holes  # empty is not hole
-        self.last_pileHeight = self.new_pileHeight
-        self.new_pileHeight = np.amax(height_idx)
-
+        # self.full/=4 # each shape have 4 pieces
+        # self.empty -= self.new_holes  # empty is not hole
+        # self.last_pileHeight = self.new_pileHeight
+        # self.new_pileHeight = np.amax(height_idx)
+        # print(height_idx[self.activePiece.column:len(self.activePiece.shape[0])+1])
+        # print(self.activePiece.column,len(self.activePiece.shape[0])+self.activePiece.column+1)
+        # self.increase = self.last_pileHeight -\
+        #                 np.amax(height_idx[self.activePiece.column:len(self.activePiece.shape[0])+self.activePiece.column+1])
+        # self.increase= self.last_pileHeight -np.amax(height_idx[self.activePiece.column:len(self.activePiece.shape[0])+self.activePiece.column+1])#/self.full
+        # print(self.increase)
+        # self.increase=self.increase/self.full if self.increase<0 else self.increase*self.full
+        # self.increase=-np.var(height_idx)+(self.full/4)
         # Altitude Difference: tallest column - smallest column (article 6 page:5)
-        self.altitudeDifference = self.new_pileHeight - np.amin(height_idx)
+        # self.altitudeDifference = self.new_pileHeight - np.amin(height_idx)
 
         # convert x * '' to 0,1
-        self.oneHotBoard = np.array([]).astype(np.int8)
+        self.oneHotBoard = []
+
         for r in self.board:
             for c in r:
                 if c == '':
@@ -143,33 +160,40 @@ class Tetris(tk.Tk):
                 else:
                     self.oneHotBoard = np.append(self.oneHotBoard, 1)
 
+        # find  rows filled
+        # self.lastRowsFilled = self.rowsFilled
+        # self.rowsFilled = 0
+        # for row in self.board:
+        #     if all(c == 'x' for c in row):
+        #         self.rowsFilled = self.rowsFilled + 1
         # print(self.oneHotBoard)
         # find rectangle shapes
-        self.calculated_pixel = np.zeros([24, 10])
-        self.blocksNxN = np.zeros(10).astype(np.int8)  # 0 : 10 squares
-        self.inputBoard = np.reshape(self.oneHotBoard, [24, 10])
-        self.lowerBlocks = 0
-        for r in range(4, 24):  # 4:23
-            for c in range(10):  # 0:9
-                for square in range(2, 11):  # 3:10 squares
-                    if r + square < 25 and c + square < 11 and self.board[r][c] != '' \
-                            and self.calculated_pixel[r][c] != 1:
-                        # print(square, self.inputBoard[r:r + square , c:c + square ])
-                        if np.all(self.inputBoard[r:r + square, c:c + square]):  # begin:end-1
-                            self.blocksNxN[square] += 1
-                            self.lowerBlocks = self.lowerBlocks + (square * r)
-                            # self.calculated_pixel[r:r + square, c:c + square] = 1
-                        else:
-                            break
-        for i in range(2, len(self.blocksNxN)):  # remove  3x3 blocks from 4x4 blocks and...
-            self.blocksNxN[i - 1] -= self.blocksNxN[i]
+        # self.calculated_pixel = np.zeros([24, 10])
+        # self.blocksNxN = np.zeros(10).astype(np.int8)  # 0 : 10 squares
+        # self.inputBoard = np.reshape(self.oneHotBoard, [24, 10])
+
+        # for r in range(4, 24):  # 4:23
+        #     for c in range(10):  # 0:9
+        #         for square in range(2, 11):  # 3:10 squares
+        #             if r + square < 25 and c + square < 11 and self.board[r][c] != '' \
+        #                     and self.calculated_pixel[r][c] != 1:
+        #                 # print(square, self.inputBoard[r:r + square , c:c + square ])
+        #                 if np.all(self.inputBoard[r:r + square, c:c + square]):  # begin:end-1
+        #                     self.blocksNxN[square] += 1
+        #                     # self.lowerBlocks = self.lowerBlocks + (square * r)
+        #                     # self.calculated_pixel[r:r + square, c:c + square] = 1
+        #                 else:
+        #                     break
+        # for i in range(2, len(self.blocksNxN)):  # remove  3x3 blocks from 4x4 blocks and...
+        #     self.blocksNxN[i - 1] -= self.blocksNxN[i]
         # print(self.blocksNxN)
 
         # self.state = (
         #     self.new_holes, self.new_pileHeight, self.altitudeDifference, self.empty,
         #     *self.blocksNxN[3:], *self.oneHotBoard)  # , )*self.oneHot
         # print(self.oneHotBoard)
-        self.state = (np.reshape([self.inputBoard], (1, 24, 10, 1)))  # .astype('float32')
+
+        self.state = (np.reshape([self.oneHotBoard], (1, 24, 10, 1))).astype('float32')
         # print(self.state)
         return self.state
 
@@ -189,33 +213,42 @@ class Tetris(tk.Tk):
         self.oneHot[choices.get(shape)[rot.get(rotation)]] = 1
 
     def getReward(self):
-        self.reward = self.blocksNxN[2] * 1 + self.blocksNxN[3] * 2 + self.blocksNxN[4] * 2.5 \
-                      + self.blocksNxN[5] * 3 + self.blocksNxN[6] * 3.5 + self.blocksNxN[7] * 4 \
-                      + self.blocksNxN[8] * 4.5 + self.lowerBlocks
-        +(self.empty) * -0.125 + (self.pieces) * 1 + (self.new_holes - self.last_holes) * -.1 \
-        + (self.new_pileHeight - self.last_pileHeight) * -1 + self.rowFull * 100
-        # self.reward = self.lowerBlocks
+
+        # self.reward = self.blocksNxN[2] * 1 + self.blocksNxN[3] * 2 + self.blocksNxN[4] * 2.5 \
+        #               + self.blocksNxN[5] * 3 + self.blocksNxN[6] * 3.5 + self.blocksNxN[7] * 4 \
+        #               + self.blocksNxN[8] * 4.5 + self.lowerBlocks
+        # +(self.empty) * -0.125 + (self.pieces) * 1 + (self.new_holes - self.last_holes) * -.1 \
+        # + (self.new_pileHeight - self.last_pileHeight) * -1 + self.rowFull * 100
+        # self.reward = self.lowerBlocks * .000001
+        self.reward = -3 * self.piece_holes - np.std(self.height_idx) + 2 * self.side  # np.mean(self.piece_height)
+        # *self.increase np.sum(self.piece_height)-np.var(self.height_idx)
+        # print(self.reward)
+
+        # self.reward = self.side - np.var(self.height_idx) + self.pieces  # np.sum(self.piece_height) * self.pieces
+        # self.reward = self.rowsFilled - self.lastRowsFilled
         return self.reward
 
     def setLabels(self):
+
         self.pieces_var.set('Pieces:{}'.format(self.pieces))
         self.holes_var.set('Holes:{}'.format(self.new_holes))
         self.empty_var.set('Empty:{}'.format(self.empty))
-        self.pileHeight_var.set('PileHeight: {}'.format(self.new_pileHeight))
-        self.altitudeDifference_var.set('Altitude Difference: {}'.format(self.altitudeDifference))
-        self.blocks_var.set('2x2 Blocks: {}\n3x3 Blocks: {}\n4x4 Blocks: {}\n5x5 Blocks: {}\n6x6 Blocks: {}'
-                            '\n7x7 Blocks: {}\n8x8 Blocks: {}\n9x9 Blocks: {}'
-                            .format(self.blocksNxN[2], self.blocksNxN[3], self.blocksNxN[4], self.blocksNxN[5],
-                                    self.blocksNxN[6], self.blocksNxN[7], self.blocksNxN[8], self.blocksNxN[9]))
+        # self.pileHeight_var.set('PileHeight: {}'.format(self.new_pileHeight))
+        # self.altitudeDifference_var.set('Altitude Difference: {}'.format(self.altitudeDifference))
+        # self.blocks_var.set('2x2 Blocks: {}\n3x3 Blocks: {}\n4x4 Blocks: {}\n5x5 Blocks: {}\n6x6 Blocks: {}'
+        #                     '\n7x7 Blocks: {}\n8x8 Blocks: {}\n9x9 Blocks: {}'
+        #                     .format(self.blocksNxN[2], self.blocksNxN[3], self.blocksNxN[4], self.blocksNxN[5],
+        #                             self.blocksNxN[6], self.blocksNxN[7], self.blocksNxN[8], self.blocksNxN[9]))
 
     def __init__(self, parent, render):
-        parent.title('RL Tetris')
+        parent.title('RL Storage')
         self.parent = parent
         self.render = render  # show game board
+
         self.board_width = 10
         self.board_height = 24
-        self.width = 400
-        self.height = 960
+        self.width = 300
+        self.height = 720
         self.high_score = 0
         self.square_width = self.width // 10
 
@@ -273,9 +306,9 @@ class Tetris(tk.Tk):
             self.pieces_var = tk.StringVar()
             self.holes_var = tk.StringVar()
             self.empty_var = tk.StringVar()
-            self.pileHeight_var = tk.StringVar()
-            self.altitudeDifference_var = tk.StringVar()
-            self.blocks_var = tk.StringVar()
+            # self.pileHeight_var = tk.StringVar()
+            # self.altitudeDifference_var = tk.StringVar()
+            # self.blocks_var = tk.StringVar()
 
             self.pieces_label = tk.Label(parent, textvariable=self.pieces_var, width=20, height=1, font=('Tahoma', 12))
             self.pieces_label.grid(row=1, column=1, sticky='N')  # sticky: N S E W
@@ -286,18 +319,18 @@ class Tetris(tk.Tk):
             self.empty_label = tk.Label(parent, textvariable=self.empty_var, width=20, height=1, font=('Tahoma', 12))
             self.empty_label.grid(row=3, column=1, sticky='N')  # sticky: N S E W
 
-            self.pileHeight_label = tk.Label(parent, textvariable=self.pileHeight_var, width=20, height=1,
-                                             font=('Tahoma', 12))
-            self.pileHeight_label.grid(row=4, column=1, sticky='N')
-
-            self.altitudeDifference_label = tk.Label(parent, textvariable=self.altitudeDifference_var, width=20,
-                                                     height=1,
-                                                     font=('Tahoma', 12))
-            self.altitudeDifference_label.grid(row=5, column=1, sticky='N')
-
-            self.blocks_label = tk.Label(parent, textvariable=self.blocks_var, width=20, height=10,
-                                         font=('Tahoma', 12))
-            self.blocks_label.grid(row=6, column=1, sticky='N')
+            # self.pileHeight_label = tk.Label(parent, textvariable=self.pileHeight_var, width=20, height=1,
+            #                                  font=('Tahoma', 12))
+            # self.pileHeight_label.grid(row=4, column=1, sticky='N')
+            #
+            # self.altitudeDifference_label = tk.Label(parent, textvariable=self.altitudeDifference_var, width=20,
+            #                                          height=1,
+            #                                          font=('Tahoma', 12))
+            # self.altitudeDifference_label.grid(row=5, column=1, sticky='N')
+            #
+            # self.blocks_label = tk.Label(parent, textvariable=self.blocks_var, width=20, height=10,
+            #                              font=('Tahoma', 12))
+            # self.blocks_label.grid(row=6, column=1, sticky='N')
 
     def toggle_guides(self, event=None):
         self.guide_fill = '' if self.guide_fill else 'black'
@@ -445,9 +478,17 @@ class Tetris(tk.Tk):
             self.settle()
 
     def settle(self):
+        self.piece_height.clear()
+        self.side = 0
         self.pieceIsActive = False
-        for row in self.board:
-            row[:] = ['x' if cell == '*' else cell for cell in row]
+        for row in range(24):
+            for col in range(10):
+                if self.board[row][col] == '*':
+                    self.side += self.board[row].count('x')
+                    self.piece_height.append(row)
+                    self.board[row][col] = 'x'
+
+            # row[:] = ['x' if cell == '*' else cell for cell in row]
         if self.render:
             for (x1, y1, x2, y2), id in zip(self.activePiece.coords, self.activePiece.piece):
                 self.field[y1 // self.square_width][x1 // self.square_width] = id
@@ -466,8 +507,10 @@ class Tetris(tk.Tk):
 
     def spawn(self):
         key = random.choice('szrLoIT')
-        rot = random.choice((0, 90, 180, 270))
-        self.oneHotEncoder(key, rot)
+        # rot = random.choice((0, 90, 180, 270))
+        # self.oneHotEncoder(key, rot)
+        # key = 'o'
+        rot = 0
         shape = rotate(self.shapes[key], rot)
         width = len(shape[0])
         start = (10 - width) // 2
