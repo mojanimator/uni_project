@@ -27,13 +27,12 @@ class Shape:
 class Tetris(tk.Tk):
 
     # reset env
-    def reset(self):
-        # def reset(self, weights):
-        #
-        #     self.w1 = weights[0]  # holes weight
-        #     self.w2 = weights[1]  # var height weight
-        #     self.w3 = weights[2]  # piece sides weight
-        #     self.w4 = weights[3]  # piece height weight
+    def reset(self, weights):
+
+        self.w1 = weights[0]  # holes weight
+        self.w2 = weights[1]  # var height weight
+        self.w3 = weights[2]  # piece sides weight
+        self.w4 = weights[3]  # piece height weight
 
         self.tickrate = 1000
         self.score = 0
@@ -227,10 +226,8 @@ class Tetris(tk.Tk):
         # +(self.empty) * -0.125 + (self.pieces) * 1 + (self.new_holes - self.last_holes) * -.1 \
         # + (self.new_pileHeight - self.last_pileHeight) * -1 + self.rowFull * 100
         # self.reward = self.lowerBlocks * .000001
-        # self.reward = -(self.w1 * self.piece_holes + self.w2 * np.var(self.height_idx)) + \
-        #               (self.w3 * self.side + self.w4 * np.mean(self.piece_height))
-        self.reward = -(3 * self.piece_holes + 2 * np.var(self.height_idx)) + \
-                      (self.side + np.mean(self.piece_height))
+        self.reward = -(self.w1 * self.piece_holes + self.w2 * np.std(self.height_idx)) + \
+                      (self.w3 * self.side + self.w4 * np.mean(self.piece_height))
         # *self.increase np.sum(self.piece_height)-np.var(self.height_idx)
         # print(np.mean(self.piece_height))
 
@@ -517,10 +514,11 @@ class Tetris(tk.Tk):
 
     def spawn(self):
         key = random.choice('szrLoIT')
-        # rot = random.choice((0, 90, 180, 270))
+        # key = 'o'
+        rot = random.choice((0, 90, 180, 270))
         # self.oneHotEncoder(key, rot)
         # key = 'o'
-        rot = 0
+        # rot = 0
         shape = rotate(self.shapes[key], rot)
         width = len(shape[0])
         start = (10 - width) // 2

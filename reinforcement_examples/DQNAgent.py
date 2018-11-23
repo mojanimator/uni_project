@@ -21,13 +21,13 @@ class DQNAgent:
         np.random.seed(1)
         self.state_size = state_size
         self.action_size = action_size
-        self.MEMORY_LEN = 590000
+        self.MEMORY_LEN = 2000
         self.memory = deque(maxlen=self.MEMORY_LEN)
         self.GAMMA = 0.95  # degree of feature effect (discount factor)
         self.EPSILON = 1.0  # exploration rate (in beginning)
         self.EPSILON_DECAY = 0.9999  # slowly shift exploration to exploitation
         self.EPSILON_MIN = 0.01
-        self.LEARNING_RATE = 1e-2  # 0.001  # gradient descent rate 0.001
+        self.LEARNING_RATE = 0.001  # 0.001  # gradient descent rate 0.001
         self.EPOCHS = 1
         self.model = self._build_model()
 
@@ -48,7 +48,7 @@ class DQNAgent:
         model.add(Dense(self.action_size, activation=activations.softmax))
 
         model.compile(loss=losses.categorical_crossentropy,  # loss='mse' losses.categorical_crossentropy
-                      optimizer=optimizers.Adam(lr=self.LEARNING_RATE))  # RMSProb,Adam
+                      optimizer=optimizers.Nadam(lr=self.LEARNING_RATE))  # RMSProb,Adam
         self.tensorBoard = TensorBoard('./logs/RLAgent', histogram_freq=0,
                                        write_graph=True, write_images=True)
         model.summary()

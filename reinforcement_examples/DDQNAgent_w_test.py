@@ -1,5 +1,5 @@
 import sys
-import gym
+# import gym
 import pylab
 import random
 import numpy as np
@@ -15,10 +15,11 @@ from tensorflow.python.keras import initializers, regularizers
 from tensorflow.python.keras import losses
 from tensorflow.python.keras.callbacks import TensorBoard
 
-from TetrisEnv import Tetris
+from TetrisEnv_w_test import Tetris
 import tkinter as tk
 import matplotlib.pyplot as plt
 import time
+import os.path
 
 
 # Double DQN Agent for the Cartpole
@@ -40,7 +41,7 @@ class DoubleDQNAgent:
         self.discount_factor = 0.99
         self.LEARNING_RATE = 0.001  # best is 0.001
         self.epsilon = 1.0
-        self.epsilon_decay = 0.9999
+        self.epsilon_decay = 0.9999  # 2000 episodes
         self.epsilon_min = 0.01
         self.batch_size = 64
         self.train_start = 1000
@@ -56,21 +57,21 @@ class DoubleDQNAgent:
         self.update_target_model()
 
         if self.load_model:
-            self.model.load_weights("./save_model/cartpole_ddqn.h5")
+            self.model.load_weights("./save_model/tetris_ddqn.h5")
 
     # approximate Q function using Neural Network
     # state is input and Q Value of each action is output of network
     def build_model(self):
         model = Sequential()
-        model.add(Conv2D(32, (4, 4), strides=(2, 2), input_shape=(24, 10, 1),  # batch_size=64,
+        model.add(Conv2D(32, (4, 4), strides=(1, 1), input_shape=(24, 10, 1),  # batch_size=64,
                          kernel_initializer=initializers.glorot_uniform(), activation=activations.relu,
                          kernel_regularizer=regularizers.l2(0.01)))  # kernel initialize weights
-
+        # model.add(Dropout(0.2))
         model.add(Conv2D(64, (3, 3), strides=(1, 1), activation=activations.relu))
-
+        # model.add(Dropout(0.2))
         model.add(Conv2D(128, (2, 2), strides=(1, 1), activation=activations.relu))
 
-        # model.add(Dropout(0.5))
+        # model.add(Dropout(0.2))
         model.add(Flatten())
 
         # model.add(Dense(512, input_dim=self.state_size, activation=activations.linear))  # autograd,PLRelu,RMS Prob
@@ -87,7 +88,7 @@ class DoubleDQNAgent:
         model.add(Dense(self.action_size, activation=activations.softmax))
 
         model.compile(loss=losses.categorical_crossentropy,  # loss='mse' losses.categorical_crossentropy
-                      optimizer=optimizers.RMSprop(lr=self.LEARNING_RATE))  # RMSprob,Adam,Nadam
+                      optimizer=optimizers.Nadam(lr=self.LEARNING_RATE))  # RMSprob,Adam,Nadam
         self.tensorBoard = TensorBoard('./logs/RLAgent', histogram_freq=0,
                                        write_graph=True, write_images=True)
         model.summary()
@@ -172,11 +173,26 @@ ys = []
 
 # ready diagram
 plt.interactive(True)
-f = plt.figure(figsize=(7, 5), dpi=100)
+f = plt.figure(figsize=(15, 9), dpi=100)
 ax = f.add_subplot(111)
 
+
+def simplify(r):
+    r = np.array(r)
+    res = np.mean(r.reshape(-1, 20), axis=1)
+
+    return range(1, len(r), 20), res
+
+
 if __name__ == "__main__":
-    EPISODES = 10
+    # i=1
+    # j=1
+    # while i>0.01:
+    #     i*=0.998
+    #     j+=1
+    #     print(j,i)
+
+    EPISODES = 2000
     root = tk.Tk()
     root.geometry('+%d+%d' % (800, 10))
     env = Tetris(root, render=True)
@@ -184,15 +200,32 @@ if __name__ == "__main__":
     state_size, action_size = env.getStateActionSize()
     # agent = DoubleDQNAgent(state_size, action_size)
 
-    weights = [
-        [1, 1, 1, 1], [2, 1, 1, 1], [3, 1, 1, 1], [4, 1, 1, 1],
-        [1, 2, 1, 1], [1, 3, 1, 1], [1, 4, 1, 1],
-        [1, 1, 2, 1], [1, 1, 3, 1], [1, 1, 4, 1],
-        [1, 1, 1, 2], [1, 1, 1, 3], [1, 1, 1, 4],
-        [2, 2, 1, 1], [1, 2, 2, 1], [1, 1, 2, 2], [3, 3, 1, 1], [3, 2.5, 1, 1],
-        [2, 2.5, 2, 1], [1, 2.5, 2, 1], [3, 2, 1, 1], [1.5, 2, 1, 1], [2.5, 1, 2, 1],
+    weights = []
+    # [2, 3, 1, 2],[2, 3, 1, 3],[2, 3, 1, 4],[2, 3, 1, 5],
 
-    ]
+    #  [1,1,2,2],[1,1,1,2],[1,1,2,1],
+    # [3,4,2,0],[1,1,1,1],[4,4,2,5]
+    #  [3,1,3,1],[2.5,2,1,4],[3,2,3,2],
+    # [2.5,1,2,1],[2.5, 3, 3, 1],[3, 2.5,3, 1],#
+    #   [3, 3, 1, 1],[4,4,2,1], [3, 2, 3, 1], # are  best till now
+    # [5, 4, 2,2],[5,4, 3,4],[6, 4, 2,2],[6,4, 3,4],
+    #  [5, 4,1, 2],[5, 4,1, 3],[5, 4, 2,1],[5, 4, 2,2],[5,4, 3, 1],
+    #  [3, 2, 3, 1],[3, 2, 4, 1],[4, 5, 1, 1],[5, 4, 1, 1],[3, 4,4, 1],
+    #  [4, 4, 3, 1],[4, 4, 4, 1],[4, 4, 1, 4],[5, 4, 1, 1],[5, 4,4, 1],
+    #  [4,4,1,1],[4,4,1,2],[4,4,2,2],[3,3,1,2],[3,3,1,3],[3,3,2,1],
+    #  [2, 1.5, 1, 1], [3, 2, 1, 1], [3, 2.5, 4, 1],[3, 3, 1, 1], [3.5, 2, 1, 1], [3.5, 2.5, 1, 1],
+
+    # [2, 1, 1, 1], [1, 1, 3, 1], [1, 1, 4, 1],
+    # [1, 1, 1, 2], [1, 1, 1, 3], [1, 1, 1, 4],
+    # [2, 2, 1, 1], [1, 2, 2, 1], [1, 1, 2, 2], [3, 3, 1, 1], [3, 2.5, 1, 1],
+    # [2, 2.5, 2, 1], [1, 2.5, 2, 1], [3, 2, 1, 1], [1.5, 2, 1, 1], [2.5, 1, 2, 1],
+    # [3, 2.5, 2, 1], [3, 2, 2, 1], [3, 3, 1, 1], [4, 2, 1, 1], [4, 3, 2, 1],
+
+    # testRange=np.linspace(0,1.5,num=5)
+    #
+    # [ weights.append([i,j,k,l]) for i in np.linspace(0.5,1.5,num=5) for j in testRange for k in testRange for l in testRange]
+    test = np.linspace(.1, 1.6, num=5)
+    [weights.append([random.choice(test), random.choice(test), random.choice(test), 0.01]) for _ in range(40)]
     results = []
     ep = list(range(EPISODES))
 
@@ -231,15 +264,15 @@ if __name__ == "__main__":
                     e_score = np.sum(state) * .5
                     scores.append(e_score)
 
-                    print("episode:{}/{}  used:{:.4}% e: {:.2}".format(e, EPISODES, e_score, agent.epsilon))
+                    print("episode:{}/{}  used:{:.4}% e: {:.4}".format(e, EPISODES, e_score, agent.epsilon))
 
                     # xs.append(e)
                     # ys.append(score)
                     # showDiagram()
                     # pylab.plot(xs, ys, 'b')
 
-                    pylab.savefig("./ddqn_output/save_graph/tetris_ddqn.png")
-
+                    # pylab.savefig("./ddqn_output/save_graph/tetris_ddqn.png")
+                    plt.pause(0.00001)
                     # if the mean of scores of last 10 episode is bigger than 90
                     # stop training
                     # if np.mean(scores[-min(10, len(scores)):]) > 90:
@@ -252,11 +285,28 @@ if __name__ == "__main__":
         # collect results for every weights
         results.append(scores)
 
-        # ax.clear()
-        f.clf()
+        l = len(results)
 
-        for idx, r in enumerate(results):
-            plt.plot(ep, r, label=" weight {}".format(idx))
-        plt.legend(loc=3)
-        plt.pause(0.0001)
-    # plot all results
+        if (l % 5 == 0):
+            f.clf()
+            plt.xlabel('Episode')
+            plt.ylabel('Used(%)')
+
+            for idx, r in enumerate(results[l - 5:l]):
+                ep, r = simplify(r)  # mean every 20 steps
+                plt.plot(ep, r, label=" weight {},{},{},{}".format(weights[idx][0], weights[idx][1], weights[idx][2],
+                                                                   weights[idx][3]))
+
+            plt.legend(loc=3)
+            # save file
+            file = './ddqn_output/save_graph/tetris_ddqn_' + str(l - 5) + '_' + str(l) + '.png'
+            pylab.savefig(file)
+
+# save file
+# i=1
+# file='./ddqn_output/save_graph/tetris_ddqn_'+str(i)+'.png'
+# while(os.path.exists(file)):
+#     i+=1
+#     file = './ddqn_output/save_graph/tetris_ddqn_' + str(i) + '.png'
+# pylab.savefig(  file)
+# plot all results

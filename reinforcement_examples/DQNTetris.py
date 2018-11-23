@@ -67,7 +67,7 @@ def showDiagram():
 
 
 batch_size = 32
-n_episodes = 100000
+n_episodes = 1100
 counter = 0
 episode_rewards = []
 for e in range(n_episodes):
@@ -93,9 +93,9 @@ for e in range(n_episodes):
         # print('reward', reward)
         if losed:
             # print("episode:{}/{}, reward:{}, e: {:.2}".format(e, n_episodes, reward, agent.EPSILON))
-            used = np.sum(state)
+            used = np.sum(state) * .5
             # *100/240
-            print("episode:{}/{}  used:{:.4}% e: {:.2}".format(e, n_episodes, used * .5, agent.EPSILON))
+            print("episode:{}/{}  used:{:.4}% e: {:.2}".format(e, n_episodes, used, agent.EPSILON))
             xs.append(e)
             ys.append(used)
             showDiagram()
