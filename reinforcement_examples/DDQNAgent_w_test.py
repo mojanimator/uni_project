@@ -19,7 +19,13 @@ from TetrisEnv_w_test import Tetris
 import tkinter as tk
 import matplotlib.pyplot as plt
 import time
-import os.path
+import os
+import time
+
+if (not os.path.exists('./ddqn_output')):
+    os.mkdir('./ddqn_output')
+    os.mkdir('./ddqn_output/save_model')
+    os.mkdir('./ddqn_output/save_graph')
 
 
 # Double DQN Agent for the Cartpole
@@ -28,69 +34,20 @@ import os.path
 class DoubleDQNAgent:
     np.random.seed(1)
 
-    def __init__(self, state_size, action_size):
-        # if you want to see Cartpole learning, then change to True
-        # self.render = False
-        self.load_model = False
-        # get size of state and action
-        self.state_size = state_size
-        self.action_size = action_size
-
-        # these is hyper parameters for the Double DQN
-
-        self.discount_factor = 0.99
-        self.LEARNING_RATE = 0.001  # best is 0.001
-        self.epsilon = 1.0
-        self.epsilon_decay = 0.9999  # 2000 episodes
-        self.epsilon_min = 0.01
-        self.batch_size = 64
-        self.train_start = 1000
-
-        # create replay memory using deque
-        self.memory = deque(maxlen=2000)
-
-        # create main model and target model
-        self.model = self.build_model()
-        self.target_model = self.build_model()
-
-        # initialize target model
-        self.update_target_model()
-
-        if self.load_model:
-            self.model.load_weights("./save_model/tetris_ddqn.h5")
-
     # approximate Q function using Neural Network
     # state is input and Q Value of each action is output of network
     def build_model(self):
         model = Sequential()
-        model.add(Conv2D(32, (4, 4), strides=(1, 1), input_shape=(24, 10, 1),  # batch_size=64,
-                         kernel_initializer=initializers.glorot_uniform(), activation=activations.relu,
-                         kernel_regularizer=regularizers.l2(0.01)))  # kernel initialize weights
-        # model.add(Dropout(0.2))
+        model.add(Conv2D(32, (3, 3), strides=(1, 1), input_shape=(24, 10, 1),
+                         activation=activations.relu, ))
         model.add(Conv2D(64, (3, 3), strides=(1, 1), activation=activations.relu))
-        # model.add(Dropout(0.2))
-        model.add(Conv2D(128, (2, 2), strides=(1, 1), activation=activations.relu))
+        model.add(Conv2D(128, (3, 3), strides=(1, 1), activation=activations.relu))
 
-        # model.add(Dropout(0.2))
         model.add(Flatten())
 
-        # model.add(Dense(512, input_dim=self.state_size, activation=activations.linear))  # autograd,PLRelu,RMS Prob
-        # # model.add(LeakyReLU(alpha=0.3))
-        # model.add(BatchNormalization(momentum=0.99, epsilon=0.001))
-        # # model.add(LeakyReLU(alpha=0.3))
-        # model.add(Dense(256, activation=activations.linear))
-        # model.add(BatchNormalization(momentum=0.99, epsilon=0.001))
-        # model.add(Dense(128, activation=activations.linear))
-        # model.add(BatchNormalization(momentum=0.99, epsilon=0.001))
-        # model.add(Dense(64, activation=activations.linear))
-        # model.add(BatchNormalization(momentum=0.99, epsilon=0.001))
-
         model.add(Dense(self.action_size, activation=activations.softmax))
-
-        model.compile(loss=losses.categorical_crossentropy,  # loss='mse' losses.categorical_crossentropy
-                      optimizer=optimizers.Nadam(lr=self.LEARNING_RATE))  # RMSprob,Adam,Nadam
-        self.tensorBoard = TensorBoard('./logs/RLAgent', histogram_freq=0,
-                                       write_graph=True, write_images=True)
+        model.compile(loss=losses.categorical_crossentropy,
+                      optimizer=optimizers.Nadam(lr=self.LEARNING_RATE))
         model.summary()
         return model
 
@@ -100,6 +57,9 @@ class DoubleDQNAgent:
 
     # get action from model using epsilon-greedy policy
     def get_action(self, state):
+        if self.epsilon > self.epsilon_min:
+            self.epsilon -= self.epsilon_decay
+
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
         else:
@@ -109,8 +69,8 @@ class DoubleDQNAgent:
     # save sample <s,a,r,s'> to the replay memory
     def append_sample(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
+
+        # self.epsilon *= self.epsilon_decay
 
     # pick samples randomly from replay memory (with batch_size)
     def train_model(self):
@@ -149,8 +109,41 @@ class DoubleDQNAgent:
 
         # make minibatch which includes target q value and predicted q value
         # and do the model fit!
+        # F:\Ezafi\books\__ArshadBooks\0000finalProject\_project\reinforcement_examples
         self.model.fit(update_input, target, batch_size=self.batch_size,
-                       epochs=1, verbose=0)
+                       epochs=1, verbose=0, )  # callbacks=[self.tensorBoard])  # tensorboard --logdir ./logs/DRLAgent
+
+    def __init__(self, state_size, action_size):
+
+        # self.render = False
+        self.load_model = True
+        # get size of state and action
+        self.state_size = state_size
+        self.action_size = action_size
+
+        # these is hyper parameters for the Double DQN
+
+        self.discount_factor = 0.9
+        self.LEARNING_RATE = 0.001  # best is 0.001
+        self.epsilon = 0.001
+        # self.epsilon_decay = 0.9999  # 0.9999 -> 2000 episodes   *=
+        self.epsilon_decay = 0.00002  # 0.00002 -> 2500 episodes -=
+        self.epsilon_min = 0.01
+        self.batch_size = 64
+        self.train_start = 64
+
+        # create replay memory using deque
+        self.memory = deque(maxlen=5000)
+
+        # create main model and target model
+        self.model = self.build_model()
+        self.target_model = self.build_model()
+
+        # initialize target model
+        self.update_target_model()
+
+        # if self.load_model:
+        #     self.model.load_weights("./save_model/tetris_ddqn.h5")
 
 
 def showDiagram():
@@ -185,14 +178,8 @@ def simplify(r):
 
 
 if __name__ == "__main__":
-    # i=1
-    # j=1
-    # while i>0.01:
-    #     i*=0.998
-    #     j+=1
-    #     print(j,i)
 
-    EPISODES = 2000
+    EPISODES = 20000
     root = tk.Tk()
     root.geometry('+%d+%d' % (800, 10))
     env = Tetris(root, render=True)
@@ -200,38 +187,36 @@ if __name__ == "__main__":
     state_size, action_size = env.getStateActionSize()
     # agent = DoubleDQNAgent(state_size, action_size)
 
-    weights = []
-    # [2, 3, 1, 2],[2, 3, 1, 3],[2, 3, 1, 4],[2, 3, 1, 5],
-
-    #  [1,1,2,2],[1,1,1,2],[1,1,2,1],
-    # [3,4,2,0],[1,1,1,1],[4,4,2,5]
-    #  [3,1,3,1],[2.5,2,1,4],[3,2,3,2],
-    # [2.5,1,2,1],[2.5, 3, 3, 1],[3, 2.5,3, 1],#
-    #   [3, 3, 1, 1],[4,4,2,1], [3, 2, 3, 1], # are  best till now
-    # [5, 4, 2,2],[5,4, 3,4],[6, 4, 2,2],[6,4, 3,4],
-    #  [5, 4,1, 2],[5, 4,1, 3],[5, 4, 2,1],[5, 4, 2,2],[5,4, 3, 1],
-    #  [3, 2, 3, 1],[3, 2, 4, 1],[4, 5, 1, 1],[5, 4, 1, 1],[3, 4,4, 1],
-    #  [4, 4, 3, 1],[4, 4, 4, 1],[4, 4, 1, 4],[5, 4, 1, 1],[5, 4,4, 1],
-    #  [4,4,1,1],[4,4,1,2],[4,4,2,2],[3,3,1,2],[3,3,1,3],[3,3,2,1],
-    #  [2, 1.5, 1, 1], [3, 2, 1, 1], [3, 2.5, 4, 1],[3, 3, 1, 1], [3.5, 2, 1, 1], [3.5, 2.5, 1, 1],
-
-    # [2, 1, 1, 1], [1, 1, 3, 1], [1, 1, 4, 1],
-    # [1, 1, 1, 2], [1, 1, 1, 3], [1, 1, 1, 4],
-    # [2, 2, 1, 1], [1, 2, 2, 1], [1, 1, 2, 2], [3, 3, 1, 1], [3, 2.5, 1, 1],
-    # [2, 2.5, 2, 1], [1, 2.5, 2, 1], [3, 2, 1, 1], [1.5, 2, 1, 1], [2.5, 1, 2, 1],
-    # [3, 2.5, 2, 1], [3, 2, 2, 1], [3, 3, 1, 1], [4, 2, 1, 1], [4, 3, 2, 1],
+    weights = [[.6, 3.1, .6, .1], [.1, 4.0, .6, .3],
+               [3.2, 3.9, 1.9, 2.1], [0.71, 2.38, 1.32, 0.1], [2.23, 1.77, 0.87, 0.55], [2.7, 1.17, 1.17, 0.4],
+               [4.0, 2.0, 2.0, 0.0], [1.225, .85, .85, .01], [.47, 1.2, 0.1, .01], [1.4, 1.13, 3.45, 0.1],
+               [1.6, 1.6, .47, .01], [1.6, 1.6, .47, .1], [1.6, 1.6, 1.6, .01], [1.8, 1.0, 1.24, .01],
+               [.1, 2.0, .1, .67],
+               [.48, .86, .86, .01],
+               ]
 
     # testRange=np.linspace(0,1.5,num=5)
     #
     # [ weights.append([i,j,k,l]) for i in np.linspace(0.5,1.5,num=5) for j in testRange for k in testRange for l in testRange]
-    test = np.linspace(.1, 1.6, num=5)
-    [weights.append([random.choice(test), random.choice(test), random.choice(test), 0.01]) for _ in range(40)]
+    # test = np.linspace(.1, 5, num=20)
+    # test = [0.5, 1.0, 2.0, 3.0, 4.0]
+    # print(test)
+    # [weights.append([random.choice(test), random.choice(test), random.choice(test), random.choice(test)])
+    #  for _ in range(60)]
     results = []
     ep = list(range(EPISODES))
 
-    for w in weights:
+    for idx, w in enumerate(weights):
         agent = DoubleDQNAgent(state_size, action_size)
+        agent.load_model = True
+        if agent.load_model:
+            agent.model.load_weights("./ddqn_output/save_model/tetris_ddqn_"
+                                     + str(weights[idx][0]) + "_" + str(weights[idx][1]) + "_" +
+                                     str(weights[idx][2]) + "_" + str(weights[idx][3]) + ".h5")
+            print('model loaded !')
+
         scores = []
+        start_time = time.time()
         for e in range(EPISODES):
             losed = False
             e_score = 0
@@ -248,7 +233,7 @@ if __name__ == "__main__":
                 # next_state = np.reshape(next_state, [1, state_size])
                 # if an action make the episode end, then gives penalty of -100
                 # print(reward)
-                reward = reward if not losed else reward - 5
+                reward = reward if not losed else reward - 100
 
                 # save the sample <s, a, r, s'> to the replay memory
                 agent.append_sample(state, action, reward, next_state, losed)
@@ -256,6 +241,7 @@ if __name__ == "__main__":
                 agent.train_model()
                 state = next_state
 
+                plt.pause(0.00001)
                 if losed:
                     # every episode update the target model to be same with model
                     agent.update_target_model()
@@ -263,8 +249,8 @@ if __name__ == "__main__":
 
                     e_score = np.sum(state) * .5
                     scores.append(e_score)
-
-                    print("episode:{}/{}  used:{:.4}% e: {:.4}".format(e, EPISODES, e_score, agent.epsilon))
+                    print("test:{} episode:{}/{}  used:{:.4}% e: {:.4}".format(idx + 1, e, EPISODES, e_score,
+                                                                               agent.epsilon))
 
                     # xs.append(e)
                     # ys.append(score)
@@ -272,34 +258,40 @@ if __name__ == "__main__":
                     # pylab.plot(xs, ys, 'b')
 
                     # pylab.savefig("./ddqn_output/save_graph/tetris_ddqn.png")
+
                     plt.pause(0.00001)
-                    # if the mean of scores of last 10 episode is bigger than 90
+
+                    # if the mean of scores of last 10 episode is bigger than 70
                     # stop training
                     # if np.mean(scores[-min(10, len(scores)):]) > 90:
                     #     sys.exit()
 
-            # save the model
-            if e % 50 == 0:
-                agent.model.save_weights("./ddqn_output/save_model/tetris_ddqn.h5")
-
         # collect results for every weights
         results.append(scores)
+        # time
+        print("test:{}  runtime:{:.4} minute".format(idx + 1, (time.time() - start_time) / 60))
 
-        l = len(results)
+        agent.model.save_weights("./ddqn_output/save_model/tetris_ddqn_"
+                                 + str(weights[idx][0]) + "_" + str(weights[idx][1]) + "_" +
+                                 str(weights[idx][2]) + "_" + str(weights[idx][3]) + ".h5")
 
-        if (l % 5 == 0):
+        l = idx + 1
+        offset = 8
+        if (l % offset == 0):
             f.clf()
             plt.xlabel('Episode')
             plt.ylabel('Used(%)')
 
-            for idx, r in enumerate(results[l - 5:l]):
+            for id, r in enumerate(results[l - offset:l]):  # results[l - offset:l]
+                index = l - offset + id
+
                 ep, r = simplify(r)  # mean every 20 steps
-                plt.plot(ep, r, label=" weight {},{},{},{}".format(weights[idx][0], weights[idx][1], weights[idx][2],
-                                                                   weights[idx][3]))
+                plt.plot(ep, r, label=" weight {:.4},{:.4},{:.4},{:.4}"
+                         .format(weights[index][0], weights[index][1], weights[index][2], weights[index][3]))
 
             plt.legend(loc=3)
             # save file
-            file = './ddqn_output/save_graph/tetris_ddqn_' + str(l - 5) + '_' + str(l) + '.png'
+            file = './ddqn_output/save_graph/tetris_ddqn_' + str(l - offset) + '_' + str(l) + '.png'
             pylab.savefig(file)
 
 # save file

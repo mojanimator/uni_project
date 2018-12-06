@@ -1,7 +1,7 @@
 import tkinter as tk
 import random
 import time
-
+import matplotlib.pyplot as plt
 # try:
 import pygame as pg
 # except ImportError:
@@ -10,8 +10,52 @@ import pygame as pg
 #     audio = True
 from numpy.core.multiarray import dtype
 from tensorflow.python.keras import activations
-from matrix_rotation import rotate_array as rotate
+# from matrix_rotation import rotate_array as rotate
 import numpy as np
+
+
+def rotate(array, angle, wide=False):
+    '''
+    Rotates a rectangular or diamond 2D array in increments of 45 degrees.
+    Parameters:
+        array (list): a list containing sliceable sequences, such as list, tuple, or str
+        angle (int): a positive angle for rotation, in 45-degree increments.
+        wide (bool): whether a passed diamond array should rotate into a wide array
+            instead of a tall one (tall is the default). No effect on square matrices.
+    '''
+    angle = angle % 360
+    if angle < 1:
+        return [list(row) for row in array]
+    lengths = list(map(len, array))
+    rect = len(set(lengths)) == 1
+    width = max(lengths)
+    height = sum(lengths) / width
+    if wide:
+        width, height = height, width
+    if not rect:
+        array = [list(row) for row in array]
+        array = [[array[row + col].pop() for row in range(width)] for col in range(height)]
+        angle += 45
+    nineties, more = divmod(angle, 90)
+    if nineties == 3:
+        array = list(zip(*array))[::-1]
+    else:
+        for i in range(nineties):
+            array = list(zip(*array[::-1]))
+    if more:
+        ab = abs(len(array) - len(array[0]))
+        m = min(len(array), len(array[0]))
+        tall = len(array) > len(array[0])
+        array = [[array[r][c] for r, c in zip(range(row - 1, -1, -1), range(row))
+                  ] for row in range(1, m + 1)
+                 ] + [[array[r][c] for r, c in zip(range(m - 1 + row * tall, row * tall - 1, -1),
+                                                   range(row * (not tall), m + row * (not tall) + 1))
+                       ] for row in range(1, ab + (not tall))
+                      ] + [[array[r][c] for r, c in zip(range(len(array) - 1, ab * tall + row - 1, -1),
+                                                        range(ab * (not tall) + row, len(array[0]) + (not tall)))
+                            ] for row in range((not tall), m)
+                           ]
+    return array
 
 
 class Shape:
@@ -86,12 +130,14 @@ class Tetris(tk.Tk):
         self.snap()
 
         self.status = self.getState(), self.getReward(), self.done
-        # if self.render:
-        #     self.setLabels()
+
+        if self.render:
+            self.setLabels()
         # ready next piece
         if (not self.done):
             self.spawn()
         # print(self.status)
+
         return self.status
 
         # compute state after each settle
@@ -235,18 +281,6 @@ class Tetris(tk.Tk):
         # self.reward = self.rowsFilled - self.lastRowsFilled
         return self.reward
 
-    def setLabels(self):
-
-        self.pieces_var.set('Pieces:{}'.format(self.pieces))
-        self.holes_var.set('Holes:{}'.format(self.new_holes))
-        self.empty_var.set('Empty:{}'.format(self.empty))
-        # self.pileHeight_var.set('PileHeight: {}'.format(self.new_pileHeight))
-        # self.altitudeDifference_var.set('Altitude Difference: {}'.format(self.altitudeDifference))
-        # self.blocks_var.set('2x2 Blocks: {}\n3x3 Blocks: {}\n4x4 Blocks: {}\n5x5 Blocks: {}\n6x6 Blocks: {}'
-        #                     '\n7x7 Blocks: {}\n8x8 Blocks: {}\n9x9 Blocks: {}'
-        #                     .format(self.blocksNxN[2], self.blocksNxN[3], self.blocksNxN[4], self.blocksNxN[5],
-        #                             self.blocksNxN[6], self.blocksNxN[7], self.blocksNxN[8], self.blocksNxN[9]))
-
     def __init__(self, parent, render):
         parent.title('RL Storage')
         self.parent = parent
@@ -339,6 +373,19 @@ class Tetris(tk.Tk):
             #                              font=('Tahoma', 12))
             # self.blocks_label.grid(row=6, column=1, sticky='N')
 
+    def setLabels(self):
+
+        self.pieces_var.set('Pieces:{}'.format(self.pieces))
+        self.holes_var.set('Holes:{}'.format(self.new_holes))
+        self.empty_var.set('Empty:{}'.format(self.empty))
+        # self.pileHeight_var.set('PileHeight: {}'.format(self.new_pileHeight))
+        # self.altitudeDifference_var.set('Altitude Difference: {}'.format(self.altitudeDifference))
+        # self.blocks_var.set('2x2 Blocks: {}\n3x3 Blocks: {}\n4x4 Blocks: {}\n5x5 Blocks: {}\n6x6 Blocks: {}'
+        #                     '\n7x7 Blocks: {}\n8x8 Blocks: {}\n9x9 Blocks: {}'
+        #                     .format(self.blocksNxN[2], self.blocksNxN[3], self.blocksNxN[4], self.blocksNxN[5],
+        #                             self.blocksNxN[6], self.blocksNxN[7], self.blocksNxN[8], self.blocksNxN[9]))
+        # time.sleep(1)
+
     def toggle_guides(self, event=None):
         self.guide_fill = '' if self.guide_fill else 'black'
         self.canvas.itemconfig(self.guides[0], fill=self.guide_fill)
@@ -370,10 +417,8 @@ class Tetris(tk.Tk):
             self.setLabels()
 
             self.guides = [
-                self.canvas.create_line(0, 0,
-                                        0, self.height),
-                self.canvas.create_line(self.width, 0,
-                                        self.width, self.height)]
+                self.canvas.create_line(0, 0, 0, self.height),
+                self.canvas.create_line(self.width, 0, self.width, self.height)]
 
     def pause(self, event=None):
         if self.pieceIsActive and not self.paused:
@@ -500,7 +545,7 @@ class Tetris(tk.Tk):
             for (x1, y1, x2, y2), id in zip(self.activePiece.coords, self.activePiece.piece):
                 self.field[y1 // self.square_width][x1 // self.square_width] = id
 
-            self.setLabels()
+            # self.setLabels()
 
         if any(any(row) for row in self.board[:4]):
             self.lose()
