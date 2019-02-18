@@ -165,7 +165,7 @@ xs = []
 ys = []
 
 # ready diagram
-plt.interactive(True)
+# plt.interactive(True)
 f = plt.figure(figsize=(15, 9), dpi=100)
 ax = f.add_subplot(111)
 
@@ -179,10 +179,10 @@ def simplify(r):
 
 if __name__ == "__main__":
 
-    EPISODES = 20000
+    EPISODES = 500
     root = tk.Tk()
     root.geometry('+%d+%d' % (800, 10))
-    env = Tetris(root, render=True)
+    env = Tetris(root, render=False)
 
     state_size, action_size = env.getStateActionSize()
     # agent = DoubleDQNAgent(state_size, action_size)
@@ -208,7 +208,7 @@ if __name__ == "__main__":
 
     for idx, w in enumerate(weights):
         agent = DoubleDQNAgent(state_size, action_size)
-        agent.load_model = True
+        agent.load_model = False
         if agent.load_model:
             agent.model.load_weights("./ddqn_output/save_model/tetris_ddqn_"
                                      + str(weights[idx][0]) + "_" + str(weights[idx][1]) + "_" +
@@ -236,11 +236,16 @@ if __name__ == "__main__":
                 reward = reward if not losed else reward - 100
 
                 # save the sample <s, a, r, s'> to the replay memory
+
                 agent.append_sample(state, action, reward, next_state, losed)
+
                 # every time step do the training
+
                 agent.train_model()
+
                 state = next_state
 
+                # time.sleep(0.00001)
                 plt.pause(0.00001)
                 if losed:
                     # every episode update the target model to be same with model
@@ -259,7 +264,7 @@ if __name__ == "__main__":
 
                     # pylab.savefig("./ddqn_output/save_graph/tetris_ddqn.png")
 
-                    plt.pause(0.00001)
+                    # plt.pause(0.00001)
 
                     # if the mean of scores of last 10 episode is bigger than 70
                     # stop training
@@ -270,6 +275,15 @@ if __name__ == "__main__":
         results.append(scores)
         # time
         print("test:{}  runtime:{:.4} minute".format(idx + 1, (time.time() - start_time) / 60))
+
+        # compare result with another paper
+        res_txt = ""
+        with open("result-random.txt", 'w') as f:
+            for s in scores:
+                res_txt += str(s) + ","
+            f.write(res_txt)
+        sys.exit()
+        # end   compare result with another paper
 
         agent.model.save_weights("./ddqn_output/save_model/tetris_ddqn_"
                                  + str(weights[idx][0]) + "_" + str(weights[idx][1]) + "_" +
